@@ -77,6 +77,9 @@ else()
     add_library(hyperloglog SHARED ${LUA_HYPERLOGLOG_SRC})
 endif()
 
-set_target_properties(hyperloglog PROPERTIES PREFIX "")
+if (NOT LUA_SANDBOX_INCLUDE)
+	set_target_properties(hyperloglog PROPERTIES PREFIX "")
+endif()
+
 install(TARGETS hyperloglog DESTINATION lib)
 add_test(test lua ${CMAKE_SOURCE_DIR}/test.lua)
