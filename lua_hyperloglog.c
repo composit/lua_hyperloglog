@@ -153,13 +153,12 @@ static int hyperloglog_fromstring(lua_State* lua)
 
 #ifdef LUA_SANDBOX
 static int serialize_hyperloglog(lua_State *lua) {
-  output_data* output = (output_data*)lua_touserdata(lua, -1);
+  lsb_output_data* output = (lsb_output_data*)lua_touserdata(lua, -1);
   const char *key = (const char*)lua_touserdata(lua, -2);
   hyperloglog* hll = (hyperloglog*)lua_touserdata(lua, -3);
   if (!(output && key && hll)) {
     return 0;
   }
-  output->pos = 0;
   if (lsb_appendf(output,
               "if %s == nil then %s = hyperloglog.new() end\n", key, key)) {
     return 1;
