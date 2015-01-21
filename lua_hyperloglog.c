@@ -11,7 +11,6 @@
 #include <math.h>
 #include <string.h>
 
-#include "lua_hyperloglog.h"
 #include "redis_hyperloglog.h"
 
 #ifdef LUA_SANDBOX
@@ -19,12 +18,23 @@
 #include "lsb_serialize.h"
 #endif
 
+#ifdef _WIN32
+#ifdef lua_hyperloglog_EXPORTS
+#define  LHL_EXPORT __declspec(dllexport)
+#else
+#define  LHL_EXPORT __declspec(dllimport)
+#endif
+#else
+#define LHL_EXPORT
+#endif
+
+LHL_EXPORT int luaopen_hyperloglog(lua_State* lua);
+
 /* The cached cardinality MSB is used to signal validity of the cached value. */
 #define HLL_INVALIDATE_CACHE(hll) (hll)->card[7] |= (1<<7)
 #define HLL_VALID_CACHE(hll) (((hll)->card[7] & (1<<7)) == 0)
 
-const char* mozsvc_hyperloglog = "mozsvc.hyperloglog";
-const char* mozsvc_hyperloglog_table = "hyperloglog";
+static const char* mozsvc_hyperloglog = "mozsvc.hyperloglog";
 
 static const char* hll_magic = "HYLL";
 
@@ -204,7 +214,7 @@ int luaopen_hyperloglog(lua_State* lua)
   lua_pushvalue(lua, -1);
   lua_setfield(lua, -2, "__index");
   luaL_register(lua, NULL, hyperlogloglib_m);
-  luaL_register(lua, mozsvc_hyperloglog_table, hyperlogloglib_f);
+  luaL_register(lua, "hyperloglog", hyperlogloglib_f);
 
   return 1;
 }

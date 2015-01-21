@@ -45,41 +45,43 @@ else()
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH   FALSE)
 endif()
 
-if (NOT LUA_SANDBOX_INCLUDE)
-	find_package(Lua51 REQUIRED)
+if (LUA_SANDBOX_INCLUDE)
+    add_definitions(-DLUA_SANDBOX)
+    include_directories(${EP_BASE}/include)
+    include_directories(${LUA_SANDBOX_INCLUDE})
+    set(LIB_PATH ${EP_BASE}/lib)
+    find_library(LUA_LIBRARIES lua PATHS ${LIB_PATH} NO_DEFAULT_PATH)
+    find_library(LUA_SANDBOX_LIBRARIES luasandbox PATHS ${EP_BASE}/../src NO_DEFAULT_PATH)
+else()
+    find_package(Lua51 REQUIRED)
 endif()
-
 
 set(LUA_HYPERLOGLOG_SRC
 lua_hyperloglog.c
 redis_hyperloglog.c
 )
 
+add_library(hyperloglog SHARED ${LUA_HYPERLOGLOG_SRC})
+
+# remove the prefix to work with the default Lua cpath
+set_target_properties(hyperloglog PROPERTIES PREFIX "")
+if(LUA_SANDBOX_INCLUDE)
+    target_link_libraries(hyperloglog ${LUA_LIBRARIES} ${LUA_SANDBOX_LIBRARIES})
+    install(TARGETS hyperloglog DESTINATION modules)
+else()
+    target_link_libraries(hyperloglog ${LUA_LIBRARIES})
+    install(TARGETS hyperloglog DESTINATION lib)
+endif()
+
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-    add_library(hyperloglog SHARED ${LUA_HYPERLOGLOG_SRC})
-    install(DIRECTORY "${EP_BASE}/lib/"  DESTINATION lib FILES_MATCHING PATTERN "*.dll")
 elseif(MINGW)
     add_definitions(-D_MINGW)
-    add_library(hyperloglog SHARED ${LUA_HYPERLOGLOG_SRC})
     set_target_properties(hyperloglog PROPERTIES LINK_FLAGS -s)
     if (ADDRESS_MODEL EQUAL 32)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
         set_target_properties(hyperloglog PROPERTIES LINK_FLAGS "-s -m32")
     endif()
-elseif (LUA_SANDBOX_INCLUDE)
-	include_directories(${EP_BASE}/include)
-	include_directories(${LUA_SANDBOX_INCLUDE})
-	add_definitions(-DLUA_SANDBOX)
-    add_library(hyperloglog STATIC ${LUA_HYPERLOGLOG_SRC})
-	install(FILES lua_hyperloglog.h DESTINATION include)
-else()
-    add_library(hyperloglog SHARED ${LUA_HYPERLOGLOG_SRC})
 endif()
 
-if (NOT LUA_SANDBOX_INCLUDE)
-	set_target_properties(hyperloglog PROPERTIES PREFIX "")
-endif()
-
-install(TARGETS hyperloglog DESTINATION lib)
 add_test(test lua ${CMAKE_SOURCE_DIR}/test.lua)
