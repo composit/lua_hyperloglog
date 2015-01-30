@@ -18,18 +18,6 @@
 #include "lsb_serialize.h"
 #endif
 
-#ifdef _WIN32
-#ifdef lua_hyperloglog_EXPORTS
-#define  LHL_EXPORT __declspec(dllexport)
-#else
-#define  LHL_EXPORT __declspec(dllimport)
-#endif
-#else
-#define LHL_EXPORT
-#endif
-
-LHL_EXPORT int luaopen_hyperloglog(lua_State* lua);
-
 /* The cached cardinality MSB is used to signal validity of the cached value. */
 #define HLL_INVALIDATE_CACHE(hll) (hll)->card[7] |= (1<<7)
 #define HLL_VALID_CACHE(hll) (((hll)->card[7] & (1<<7)) == 0)
@@ -161,6 +149,13 @@ static int hyperloglog_fromstring(lua_State* lua)
 }
 
 
+static int hyperloglog_version(lua_State* lua)
+{
+  lua_pushstring(lua, DIST_VERSION);
+  return 1;
+}
+
+
 #ifdef LUA_SANDBOX
 static int serialize_hyperloglog(lua_State *lua) {
   lsb_output_data* output = (lsb_output_data*)lua_touserdata(lua, -1);
@@ -189,6 +184,7 @@ static int serialize_hyperloglog(lua_State *lua) {
 static const struct luaL_reg hyperlogloglib_f[] =
 {
   { "new", hyperloglog_new }
+  , { "version", hyperloglog_version }
   , { NULL, NULL }
 };
 

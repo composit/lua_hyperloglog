@@ -11,35 +11,23 @@ HyperLogLog is an algorithm for the count-distinct problem, approximating the nu
 * Lua 5.1, Lua 5.2, or LuaJIT
 * [CMake (2.8.7+)](http://cmake.org/cmake/resources/software.html)
 
-### CMake Build
-
-#### lua_hyperloglog  - UNIX Build Instructions
+### CMake Build  Instructions
 
     git clone https://github.com/mozilla-services/lua_hyperloglog.git
     cd lua_hyperloglog 
     mkdir release
     cd release
+
+    # UNIX
     cmake -DCMAKE_BUILD_TYPE=release ..
-    make install
+    make
+
+    # Windows Visual Studio 2013
+    cmake -DCMAKE_BUILD_TYPE=release -G "NMake Makefiles" ..
+    nmake
 
     ctest
-
-#### lua_hyperloglog  - Windows Build Instructions
-
-    # in a VS2013 command prompt window
-
-    git clone https://github.com/mozilla-services/lua_hyperloglog.git
-    cd lua_hyperloglog 
-    mkdir release
-    cd release
-    cmake -DCMAKE_BUILD_TYPE=release -G "NMake Makefiles" ..
-    nmake install
-
-    # To run the tests you must install
-    cmake -DCMAKE_INSTALL_PREFIX="" ..
-    nmake install DESTDIR=test
-    cd ..\src\test
-    ..\..\release\test\lib\test_lua_hyperloglog.exe
+    cpack
 
 ## Module
 
@@ -66,6 +54,20 @@ Import Lua _hyperloglog_ via the Lua 'require' function. The module is
 globally registered and returned by the require function. The _new_ function
 takes no arguments and returns a hyperloglog userdata object.
 
+#### version
+```lua
+local v = hyperloglog.version()
+-- v == "0.1.0"
+```
+
+Returns a string with the running version of hyperloglog.
+
+*Arguments*
+- none
+
+*Return*
+- Semantic version string
+
 ### API Methods
 
 #### add
@@ -76,7 +78,7 @@ local altered = hll:add(key)
 Adds an item to the hyperloglog.
 
 *Arguments*
-- key (string/number) The key to add to the hyperloglog.
+- key (string/number) The item key to add to the hyperloglog.
 
 *Return*
 - True if the estimate was altered, false if it remains unchanged.
