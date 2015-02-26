@@ -178,6 +178,17 @@ static int serialize_hyperloglog(lua_State *lua) {
   }
   return 0;
 }
+
+
+static int output_hyperloglog(lua_State* lua)
+{
+  lsb_output_data* output = (lsb_output_data*)lua_touserdata(lua, -1);
+  hyperloglog* hll = (hyperloglog*)lua_touserdata(lua, -2);
+  if (!(output && hll)) {
+    return 0;
+  }
+  return lsb_appends(output, (const char*)hll, sizeof(hyperloglog) - 1);
+}
 #endif
 
 
@@ -204,6 +215,7 @@ int luaopen_hyperloglog(lua_State* lua)
 #ifdef LUA_SANDBOX
   lua_newtable(lua);
   lsb_add_serialize_function(lua, serialize_hyperloglog);
+  lsb_add_output_function(lua, output_hyperloglog);
   lua_replace(lua, LUA_ENVIRONINDEX);
 #endif
   luaL_newmetatable(lua, mozsvc_hyperloglog);
