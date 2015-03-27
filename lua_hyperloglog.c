@@ -6,11 +6,11 @@
 
 /** @brief Lua hyperloglog implementation @file */
 
-#include <lauxlib.h>
-#include <lua.h>
 #include <math.h>
 #include <string.h>
 
+#include "lsb/lauxlib.h"
+#include "lsb/lua.h"
 #include "redis_hyperloglog.h"
 
 #ifdef LUA_SANDBOX
