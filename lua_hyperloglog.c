@@ -9,13 +9,13 @@
 #include <math.h>
 #include <string.h>
 
-#include "lsb/lauxlib.h"
-#include "lsb/lua.h"
+#include "lauxlib.h"
+#include "lua.h"
 #include "redis_hyperloglog.h"
 
 #ifdef LUA_SANDBOX
-#include "lsb_output.h"
-#include "lsb_serialize.h"
+#include "luasandbox_output.h"
+#include "luasandbox_serialize.h"
 #endif
 
 /* The cached cardinality MSB is used to signal validity of the cached value. */
