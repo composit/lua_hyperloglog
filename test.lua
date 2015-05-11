@@ -30,5 +30,3 @@ ok, _ = pcall(hll.count, hll, 1)
 assert(ok == false, "count incorrect number of args")
 ok, _ = pcall(hll.clear, hll, 1)
 assert(ok == false, "clear incorrect number of args")
-
-print("OK")
