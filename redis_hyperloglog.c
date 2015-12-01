@@ -56,7 +56,7 @@
  * [1] Heule, Nunkesser, Hall: HyperLogLog in Practice: Algorithmic
  *     Engineering of a State of The Art Cardinality Estimation Algorithm.
  *
- * [2] P. Flajolet, Ã?ric Fusy, O. Gandouet, and F. Meunier. Hyperloglog: The
+ * [2] P. Flajolet, Eric Fusy, O. Gandouet, and F. Meunier. Hyperloglog: The
  *     analysis of a near-optimal cardinality estimation algorithm.
  *
  * The "dense" representation where every entry is represented by a
