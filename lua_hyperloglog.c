@@ -158,36 +158,29 @@ static int hyperloglog_version(lua_State* lua)
 
 #ifdef LUA_SANDBOX
 static int serialize_hyperloglog(lua_State *lua) {
-  lsb_output_data* output = (lsb_output_data*)lua_touserdata(lua, -1);
-  const char *key = (const char*)lua_touserdata(lua, -2);
-  hyperloglog* hll = (hyperloglog*)lua_touserdata(lua, -3);
-  if (!(output && key && hll)) {
-    return 0;
-  }
-  if (lsb_appendf(output,
+  lsb_output_buffer* ob = lua_touserdata(lua, -1);
+  const char *key = lua_touserdata(lua, -2);
+  hyperloglog* hll = lua_touserdata(lua, -3);
+  if (!(ob && key && hll)) return 1;
+
+  if (lsb_outputf(ob,
               "if %s == nil then %s = hyperloglog.new() end\n", key, key)) {
     return 1;
   }
 
-  if (lsb_appendf(output, "%s:fromstring(\"", key)) {
-    return 1;
-  }
-  if (lsb_serialize_binary(hll, sizeof(hyperloglog) - 1, output)) return 1;
-  if (lsb_appends(output, "\")\n", 3)) {
-    return 1;
-  }
+  if (lsb_outputf(ob, "%s:fromstring(\"", key)) return 1;
+  if (lsb_serialize_binary(ob, hll, sizeof(hyperloglog) - 1)) return 1;
+  if (lsb_outputs(ob, "\")\n", 3)) return 1;
   return 0;
 }
 
 
 static int output_hyperloglog(lua_State* lua)
 {
-  lsb_output_data* output = (lsb_output_data*)lua_touserdata(lua, -1);
-  hyperloglog* hll = (hyperloglog*)lua_touserdata(lua, -2);
-  if (!(output && hll)) {
-    return 0;
-  }
-  return lsb_appends(output, (const char*)hll, sizeof(hyperloglog) - 1);
+  lsb_output_buffer* ob = lua_touserdata(lua, -1);
+  hyperloglog* hll = lua_touserdata(lua, -2);
+  if (!(ob && hll)) return 1;
+  return lsb_outputs(ob, (const char*)hll, sizeof(hyperloglog) - 1);
 }
 #endif
 
