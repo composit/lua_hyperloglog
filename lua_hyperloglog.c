@@ -180,7 +180,8 @@ static int output_hyperloglog(lua_State* lua)
   lsb_output_buffer* ob = lua_touserdata(lua, -1);
   hyperloglog* hll = lua_touserdata(lua, -2);
   if (!(ob && hll)) return 1;
-  return lsb_outputs(ob, (const char*)hll, sizeof(hyperloglog) - 1);
+  if (lsb_outputs(ob, (const char*)hll, sizeof(hyperloglog) - 1)) return 1;
+  return 0;
 }
 #endif
 
