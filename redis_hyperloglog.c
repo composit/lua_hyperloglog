@@ -99,181 +99,24 @@
  *
  */
 
-#define HLL_P_MASK (HLL_REGISTERS-1) /* Mask to index register. */
-#define HLL_REGISTER_MAX ((1<<HLL_BITS)-1)
-
-/* =========================== Low level bit macros ========================= */
-
-/* Macros to access the dense representation.
- *
- * We need to get and set 6 bit counters in an array of 8 bit bytes.
- * We use macros to make sure the code is inlined since speed is critical
- * especially in order to compute the approximated cardinality in
- * HLLCOUNT where we need to access all the registers at once.
- * For the same reason we also want to avoid conditionals in this code path.
- *
- * +--------+--------+--------+------//
- * |11000000|22221111|33333322|55444444
- * +--------+--------+--------+------//
- *
- * Note: in the above representation the most significant bit (MSB)
- * of every byte is on the left. We start using bits from the LSB to MSB,
- * and so forth passing to the next byte.
- *
- * Example, we want to access to counter at pos = 1 ("111111" in the
- * illustration above).
- *
- * The index of the first byte b0 containing our data is:
- *
- *  b0 = 6 * pos / 8 = 0
- *
- *   +--------+
- *   |11000000|  <- Our byte at b0
- *   +--------+
- *
- * The position of the first bit (counting from the LSB = 0) in the byte
- * is given by:
- *
- *  fb = 6 * pos % 8 -> 6
- *
- * Right shift b0 of 'fb' bits.
- *
- *   +--------+
- *   |11000000|  <- Initial value of b0
- *   |00000011|  <- After right shift of 6 pos.
- *   +--------+
- *
- * Left shift b1 of bits 8-fb bits (2 bits)
- *
- *   +--------+
- *   |22221111|  <- Initial value of b1
- *   |22111100|  <- After left shift of 2 bits.
- *   +--------+
- *
- * OR the two bits, and finally AND with 111111 (63 in decimal) to
- * clean the higher order bits we are not interested in:
- *
- *   +--------+
- *   |00000011|  <- b0 right shifted
- *   |22111100|  <- b1 left shifted
- *   |22111111|  <- b0 OR b1
- *   |  111111|  <- (b0 OR b1) AND 63, our value.
- *   +--------+
- *
- * We can try with a different example, like pos = 0. In this case
- * the 6-bit counter is actually contained in a single byte.
- *
- *  b0 = 6 * pos / 8 = 0
- *
- *   +--------+
- *   |11000000|  <- Our byte at b0
- *   +--------+
- *
- *  fb = 6 * pos % 8 = 0
- *
- *  So we right shift of 0 bits (no shift in practice) and
- *  left shift the next byte of 8 bits, even if we don't use it,
- *  but this has the effect of clearing the bits so the result
- *  will not be affacted after the OR.
- *
- * -------------------------------------------------------------------------
- *
- * Setting the register is a bit more complex, let's assume that 'val'
- * is the value we want to set, already in the right range.
- *
- * We need two steps, in one we need to clear the bits, and in the other
- * we need to bitwise-OR the new bits.
- *
- * Let's try with 'pos' = 1, so our first byte at 'b' is 0,
- *
- * "fb" is 6 in this case.
- *
- *   +--------+
- *   |11000000|  <- Our byte at b0
- *   +--------+
- *
- * To create a AND-mask to clear the bits about this position, we just
- * initialize the mask with the value 63, left shift it of "fs" bits,
- * and finally invert the result.
- *
- *   +--------+
- *   |00111111|  <- "mask" starts at 63
- *   |11000000|  <- "mask" after left shift of "ls" bits.
- *   |00111111|  <- "mask" after invert.
- *   +--------+
- *
- * Now we can bitwise-AND the byte at "b" with the mask, and bitwise-OR
- * it with "val" left-shifted of "ls" bits to set the new bits.
- *
- * Now let's focus on the next byte b1:
- *
- *   +--------+
- *   |22221111|  <- Initial value of b1
- *   +--------+
- *
- * To build the AND mask we start again with the 63 value, right shift
- * it by 8-fb bits, and invert it.
- *
- *   +--------+
- *   |00111111|  <- "mask" set at 2&6-1
- *   |00001111|  <- "mask" after the right shift by 8-fb = 2 bits
- *   |11110000|  <- "mask" after bitwise not.
- *   +--------+
- *
- * Now we can mask it with b+1 to clear the old bits, and bitwise-OR
- * with "val" left-shifted by "rs" bits to set the new value.
- */
-
-/* Note: if we access the last counter, we will also access the b+1 byte
- * that is out of the array, but sds strings always have an implicit null
- * term, so the byte exists, and we can skip the conditional (or the need
- * to allocate 1 byte more explicitly). */
-
-/* Store the value of the register at position 'regnum' into variable 'target'.
- * 'p' is an array of unsigned bytes. */
-#define HLL_DENSE_GET_REGISTER(target,p,regnum) do { \
-    uint8_t *_p = (uint8_t*) p; \
-    unsigned long _byte = regnum*HLL_BITS/8; \
-    unsigned long _fb = regnum*HLL_BITS&7; \
-    unsigned long _fb8 = 8 - _fb; \
-    unsigned long b0 = _p[_byte]; \
-    unsigned long b1 = _p[_byte+1]; \
-    target = ((b0 >> _fb) | (b1 << _fb8)) & HLL_REGISTER_MAX; \
-} while(0)
-
-/* Set the value of the register at position 'regnum' to 'val'.
- * 'p' is an array of unsigned bytes. */
-#define HLL_DENSE_SET_REGISTER(p,regnum,val) do { \
-    uint8_t *_p = (uint8_t*) p; \
-    unsigned long _byte = regnum*HLL_BITS/8; \
-    unsigned long _fb = regnum*HLL_BITS&7; \
-    unsigned long _fb8 = 8 - _fb; \
-    unsigned long _v = val; \
-    _p[_byte] &= ~(HLL_REGISTER_MAX << _fb); \
-    _p[_byte] |= _v << _fb; \
-    _p[_byte+1] &= ~(HLL_REGISTER_MAX >> _fb8); \
-    _p[_byte+1] |= _v >> _fb8; \
-} while(0)
-
-
 /* ========================= HyperLogLog algorithm  ========================= */
 
 /* Our hash function is MurmurHash2, 64 bit version.
  * It was modified for Redis in order to provide the same result in
  * big and little endian archs (endian neutral). */
-static uint64_t MurmurHash64A(const void* key, int len, unsigned int seed)
+static uint64_t MurmurHash64A(const void *key, int len, unsigned int seed)
 {
   const uint64_t m = 0xc6a4a7935bd1e995;
   const int r = 47;
   uint64_t h = seed ^ (len * m);
-  const uint8_t* data = (const uint8_t*)key;
-  const uint8_t* end = data + (len - (len & 7));
+  const uint8_t *data = (const uint8_t *)key;
+  const uint8_t *end = data + (len - (len & 7));
 
   while (data != end) {
     uint64_t k;
 
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-    k = *((uint64_t*)data);
+    k = *((uint64_t *)data);
 #else
     k = (uint64_t)data[0];
     k |= (uint64_t)data[1] << 8;
@@ -320,7 +163,7 @@ static uint64_t MurmurHash64A(const void* key, int len, unsigned int seed)
 /* Given a string element to add to the HyperLogLog, returns the length
  * of the pattern 000..1 of the element hash. As a side effect 'regp' is
  * set to the register index this element hashes to. */
-static int hllPatLen(unsigned char* ele, size_t elesize, long* regp)
+static int hllPatLen(unsigned char *ele, size_t elesize, long *regp)
 {
   uint64_t hash, bit, index;
   int count;
@@ -353,7 +196,7 @@ static int hllPatLen(unsigned char* ele, size_t elesize, long* regp)
  * PE is an array with a pre-computer table of values 2^-reg indexed by reg.
  * As a side effect the integer pointed by 'ezp' is set to the number
  * of zero registers. */
-static double hllDenseSum(uint8_t* registers, double* PE, int* ezp)
+static double hllDenseSum(uint8_t *registers, double *PE, int *ezp)
 {
   double E = 0;
   int j, ez = 0;
@@ -362,9 +205,9 @@ static double hllDenseSum(uint8_t* registers, double* PE, int* ezp)
    * with other values by modifying the defines, but for our target value
    * we take a faster path with unrolled loops. */
   if (HLL_REGISTERS == 16384 && HLL_BITS == 6) {
-    uint8_t* r = registers;
+    uint8_t *r = registers;
     unsigned long r0, r1, r2, r3, r4, r5, r6, r7, r8, r9,
-      r10, r11, r12, r13, r14, r15;
+        r10, r11, r12, r13, r14, r15;
     for (j = 0; j < 1024; j++) {
       /* Handle 16 registers per iteration. */
       r0 = r[0] & 63; if (r0 == 0) ez++;
@@ -388,8 +231,8 @@ static double hllDenseSum(uint8_t* registers, double* PE, int* ezp)
        * code more with a loss of precision that is not very relevant
        * here (floating point math is not commutative!). */
       E += (PE[r0] + PE[r1]) + (PE[r2] + PE[r3]) + (PE[r4] + PE[r5]) +
-        (PE[r6] + PE[r7]) + (PE[r8] + PE[r9]) + (PE[r10] + PE[r11]) +
-        (PE[r12] + PE[r13]) + (PE[r14] + PE[r15]);
+          (PE[r6] + PE[r7]) + (PE[r8] + PE[r9]) + (PE[r10] + PE[r11]) +
+          (PE[r12] + PE[r13]) + (PE[r14] + PE[r15]);
       r += 12;
     }
   } else {
@@ -410,6 +253,45 @@ static double hllDenseSum(uint8_t* registers, double* PE, int* ezp)
   return E;
 }
 
+/* Implements the SUM operation for uint8_t data type which is only used
+ * internally as speedup for PFCOUNT with multiple keys. */
+double hllRawSum(uint8_t *registers, double *PE, int *ezp)
+{
+  double E = 0;
+  int j, ez = 0;
+  uint64_t *word = (uint64_t *)registers;
+  uint8_t *bytes;
+
+  for (j = 0; j < HLL_REGISTERS / 8; j++) {
+    if (*word == 0) {
+      ez += 8;
+    } else {
+      bytes = (uint8_t *)word;
+      if (bytes[0]) E += PE[bytes[0]];
+      else ez++;
+      if (bytes[1]) E += PE[bytes[1]];
+      else ez++;
+      if (bytes[2]) E += PE[bytes[2]];
+      else ez++;
+      if (bytes[3]) E += PE[bytes[3]];
+      else ez++;
+      if (bytes[4]) E += PE[bytes[4]];
+      else ez++;
+      if (bytes[5]) E += PE[bytes[5]];
+      else ez++;
+      if (bytes[6]) E += PE[bytes[6]];
+      else ez++;
+      if (bytes[7]) E += PE[bytes[7]];
+      else ez++;
+    }
+    word++;
+  }
+  E += ez; /* 2^(-reg[j]) is 1 when m is 0, add it 'ez' times for every
+              zero register in the HLL. */
+  *ezp = ez;
+  return E;
+}
+
 /* ================== Dense representation implementation  ================== */
 
 /* "Add" the element in the dense hyperloglog data structure.
@@ -423,7 +305,7 @@ static double hllDenseSum(uint8_t* registers, double* PE, int* ezp)
  * The function always succeed, however if as a result of the operation
  * the approximated cardinality changed, 1 is returned. Otherwise 0
  * is returned. */
-int hllDenseAdd(uint8_t* registers, unsigned char* ele, size_t elesize)
+int hllDenseAdd(uint8_t *registers, unsigned char *ele, size_t elesize)
 {
   uint8_t oldcount, count;
   long index;
@@ -449,9 +331,11 @@ int hllDenseAdd(uint8_t* registers, unsigned char* ele, size_t elesize)
  * mean of the registers values. 'hdr' points to the start of the SDS
  * representing the String object holding the HLL representation.
  *
- * If the sparse representation of the HLL object is not valid, the integer
- * pointed by 'invalid' is set to non-zero, otherwise it is left untouched. */
-uint64_t hllCount(hyperloglog* hdr)
+ * hllCount() supports a special internal-only encoding of HLL_RAW, that
+ * is, hdr->registers will point to an uint8_t array of HLL_REGISTERS element.
+ * This is useful in order to speedup PFCOUNT when called against multiple
+ * keys (no need to work with 6-bit integers encoding). */
+uint64_t hllCount(hyperloglog *hdr)
 {
   double m = HLL_REGISTERS;
   double E, alpha = 0.7213 / (1 + 1.079 / m);
@@ -471,7 +355,13 @@ uint64_t hllCount(hyperloglog* hdr)
   }
 
 /* Compute SUM(2^-register[0..i]). */
-  E = hllDenseSum(hdr->registers, PE, &ez);
+  if (hdr->encoding == HLL_DENSE) {
+    E = hllDenseSum(hdr->registers, PE, &ez);
+  } else if (hdr->encoding == HLL_RAW) {
+    E = hllRawSum(hdr->registers, PE, &ez);
+  } else {
+    return 0;
+  }
 
 /* Muliply the inverse of E for alpha_m * m^2 to have the raw estimate. */
   E = (1 / E) * alpha * m * m;
@@ -489,10 +379,10 @@ uint64_t hllCount(hyperloglog* hdr)
      * according to it. Only apply the correction for P=14 that's what
      * we use and the value the correction was verified with. */
     double bias = 5.9119 * 1.0e-18 * (E * E * E * E)
-      - 1.4253 * 1.0e-12 * (E * E * E) +
-      1.2940 * 1.0e-7 * (E * E)
-      - 5.2921 * 1.0e-3 * E +
-      83.3216;
+        - 1.4253 * 1.0e-12 * (E * E * E) +
+        1.2940 * 1.0e-7 * (E * E)
+        - 5.2921 * 1.0e-3 * E +
+        83.3216;
     E -= E * (bias / 100);
   }
 /* We don't apply the correction for E > 1/30 of 2^32 since we use
